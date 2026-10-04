@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="ru"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>МикроКредит</title>
+<style>
+:root{--bg:#f5f6f8;--card:#fff;--tx:#1c1f24;--mut:#6b7280;--ac:#2563eb;--bd:#e5e7eb}
+@media(prefers-color-scheme:dark){:root{--bg:#111318;--card:#1b1e25;--tx:#e8eaed;--mut:#9aa0aa;--bd:#2c303a}}
+*{box-sizing:border-box}body{margin:0;font:15px system-ui,sans-serif;background:var(--bg);color:var(--tx)}
+header{display:flex;justify-content:space-between;align-items:center;padding:14px 20px;background:var(--card);border-bottom:1px solid var(--bd)}
+main{max-width:1000px;margin:20px auto;padding:0 16px}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:12px;padding:18px;margin-bottom:16px}
+input,select{width:100%;padding:10px;margin:6px 0 12px;border:1px solid var(--bd);border-radius:8px;background:transparent;color:var(--tx)}
+button{padding:9px 16px;border:0;border-radius:8px;background:var(--ac);color:#fff;cursor:pointer}
+button.g{background:transparent;color:var(--tx);border:1px solid var(--bd)}button.r{background:#dc2626}button.ok{background:#16a34a}
+table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:8px;border-bottom:1px solid var(--bd);font-size:14px}
+.b{padding:2px 8px;border-radius:99px;font-size:12px;background:var(--bd)}.hidden{display:none}.mut{color:var(--mut)}
+.row{display:flex;gap:12px}.row>*{flex:1}@media(max-width:600px){.row{flex-direction:column;gap:0}}details{margin-top:4px}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-bottom:16px}
+.stat{background:var(--card);border:1px solid var(--bd);border-radius:12px;padding:12px}.stat b{font-size:20px}
+.bar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px}.bar input{flex:1;min-width:200px;margin:0}
+.modal{position:fixed;inset:0;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;padding:16px;z-index:10}.modal.hidden{display:none}
+.mbox{background:var(--card);border-radius:14px;padding:22px;max-width:560px;width:100%;max-height:90vh;overflow:auto}
+.kv{display:grid;grid-template-columns:140px 1fr;gap:6px 12px;font-size:14px}h4{margin:16px 0 8px}
+</style></head><body>
+<header><b>💸 МикроКредит</b><div id="who"></div></header>
+<main>
+<div id="auth" class="card hidden">
+  <h3 id="at">Вход</h3>
+  <div id="nameBox" class="hidden"><input id="name" placeholder="Имя"></div>
+  <input id="email" type="email" placeholder="Email"><input id="pass" type="password" placeholder="Пароль (мин. 6)">
+  <button onclick="submitAuth()">Продолжить</button> <button class="g" onclick="toggleMode()" id="tg">Регистрация</button>
+  <p id="aerr" style="color:#dc2626"></p>
+</div>
+<div id="app" class="hidden">
+  <div class="card" id="applyCard"><h3>Оформить займ</h3>
+    <b>Сумма и срок</b>
+    <div class="row"><div>Сумма (1000–50000)<input id="amount" type="number" value="5000"></div>
+    <div>Срок, дней (7–30)<input id="term" type="number" value="14"></div></div>
+    <p class="mut" id="calc"></p>
+    <b>Личные данные</b>
+    <div class="row"><div>ФИО<input id="full_name" placeholder="Иванов Иван Иванович"></div>
+    <div>Телефон<input id="phone" placeholder="+7 700 000 00 00"></div></div>
+    <div class="row"><div>Дата рождения<input id="birth_date" type="date"></div>
+    <div>Номер документа (паспорт / ИИН)<input id="doc_number"></div></div>
+    Адрес проживания<input id="address" placeholder="Город, улица, дом, квартира">
+    <b>Занятость и доход</b>
+    <div class="row"><div>Статус<select id="employment">
+      <option value="employed">Работаю по найму</option><option value="self">Самозанятый / ИП</option>
+      <option value="student">Студент</option><option value="pensioner">Пенсионер</option><option value="unemployed">Не работаю</option></select></div>
+    <div id="empBox">Работодатель<input id="employer"></div></div>
+    <div class="row"><div>Ежемесячный доход<input id="income" type="number"></div>
+    <div>Цель займа<input id="purpose" placeholder="Например: ремонт, лечение"></div></div>
+    <label><input type="checkbox" id="consent" style="width:auto;margin-right:8px">Подтверждаю достоверность данных и согласен на их обработку</label><br><br>
+    <button onclick="apply()">Подать заявку</button> <span id="err" style="color:#dc2626"></span></div>
+  <div class="card" id="myCard"><h3>Мои кредиты</h3><div id="my"></div></div>
+  <div class="hidden" id="adm">
+    <div class="stats" id="stats"></div>
+    <div class="card"><h3>Заявки на кредит</h3>
+      <div class="bar"><span id="tabs"></span><input id="q" placeholder="Поиск: ФИО, email, телефон, документ" oninput="renderAdmin()"></div>
+      <div id="adminList" style="overflow-x:auto"></div></div></div>
+  <div id="modal" class="modal hidden" onclick="if(event.target===this)closeModal()"><div class="mbox" id="mbox"></div></div>
+</div></main>
+<script>
+let token=localStorage.t||"",reg=false,user=null;
+const $=id=>document.getElementById(id);
+async function api(m,u,b){const r=await fetch(u,{method:m,headers:{"Content-Type":"application/json",Authorization:"Bearer "+token},body:b?JSON.stringify(b):undefined});
+ const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d.error||"Ошибка");return d}
+function toggleMode(){reg=!reg;$("at").textContent=reg?"Регистрация":"Вход";$("tg").textContent=reg?"Вход":"Регистрация";$("nameBox").classList.toggle("hidden",!reg)}
+async function submitAuth(){try{const d=await api("POST",reg?"/api/register":"/api/login",{email:$("email").value,name:$("name").value,password:$("pass").value});
+ token=localStorage.t=d.token;init()}catch(e){$("aerr").textContent=e.message}}
+async function init(){const prev=user?user.id:null;try{user=await api("GET","/api/me")}catch{user=null;resetUI();$("auth").classList.remove("hidden");$("app").classList.add("hidden");$("who").innerHTML="";return}
+ if(prev!==user.id)resetUI();$("auth").classList.add("hidden");$("app").classList.remove("hidden");
+ $("who").innerHTML=`${esc(user.name)} (id ${user.id}, ${user.role}) <button class="g" onclick="logout()">Выйти</button>`;
+ const isA=user.role==="admin";
+ ["applyCard","myCard"].forEach(i=>$(i).classList.toggle("hidden",isA));
+ $("adm").classList.toggle("hidden",!isA);if(isA)loadAdmin();else load()}
+function resetUI(){
+ ["full_name","phone","birth_date","doc_number","address","employer","income","purpose","email","pass","name"].forEach(k=>$(k).value="");
+ $("amount").value=5000;$("term").value=14;$("employment").value="employed";$("employment").onchange();$("consent").checked=false;
+ $("err").textContent="";$("aerr").textContent="";$("my").innerHTML="";$("adminList").innerHTML="";$("q").value="";adminTab="pending";allLoans=[];$("stats").innerHTML="";closeModal();upd()}
+async function logout(){try{await api("POST","/api/logout")}catch{}token=localStorage.t="";user=null;resetUI();init()}
+const st={pending:"⏳ ожидает",approved:"✅ одобрен",rejected:"❌ отклонён",repaid:"💰 погашен"};
+const fd=d=>d?new Date(d).toLocaleDateString():"—";
+async function load(){const l=await api("GET","/api/loans");prefill(l[0]);
+ $("my").innerHTML=l.length?`<table><tr><th>№</th><th>Сумма</th><th>К возврату</th><th>Оплачено</th><th>Статус</th><th>Срок до</th><th></th></tr>`+
+ l.map(x=>`<tr><td>${x.id}</td><td>${x.amount}</td><td>${x.total_due}</td><td>${x.paid}</td><td><span class=b>${st[x.status]}</span></td><td>${fd(x.due_date)}</td>
+ <td>${x.status=="approved"?`<button onclick="repay(${x.id},${x.total_due-x.paid})">Погасить</button>`:""}</td></tr>`).join("")+"</table>":'<span class=mut>Пока пусто</span>'}
+async function repay(id,rest){const a=prompt("Сумма платежа",rest.toFixed(2));if(!a)return;try{await api("POST",`/api/loans/${id}/repay`,{amount:+a});load()}catch(e){alert(e.message)}}
+let adminTab="pending",allLoans=[];
+async function loadAdmin(){allLoans=await api("GET","/api/admin/loans");renderAdmin()}
+function renderAdmin(){
+ const c=s=>allLoans.filter(x=>x.status===s).length;
+ const issued=allLoans.filter(x=>x.status==="approved"||x.status==="repaid").reduce((a,x)=>a+x.amount,0);
+ const debt=allLoans.filter(x=>x.status==="approved").reduce((a,x)=>a+x.total_due-x.paid,0);
+ $("stats").innerHTML=[["Ожидают решения",c("pending")],["Активные кредиты",c("approved")],["Погашены",c("repaid")],["Выдано всего",issued.toFixed(0)],["Долг клиентов",debt.toFixed(2)]]
+  .map(([t,v])=>`<div class=stat><div class=mut>${t}</div><b>${v}</b></div>`).join("");
+ $("tabs").innerHTML=[["pending","Ожидают"],["approved","Одобренные"],["rejected","Отклонённые"],["repaid","Погашенные"],["","Все"]]
+  .map(([k,t])=>`<button class="${k===adminTab?"":"g"}" onclick="adminTab='${k}';renderAdmin()">${t}${k?" ("+c(k)+")":""}</button>`).join(" ");
+ const q=$("q").value.toLowerCase();
+ const l=allLoans.filter(x=>(!adminTab||x.status===adminTab)&&(!q||[x.user_email,x.full_name,x.phone,x.doc_number].join(" ").toLowerCase().includes(q)));
+ $("adminList").innerHTML=l.length?`<table><tr><th>№</th><th>Заёмщик</th><th>Сумма</th><th>Срок</th><th>Подана</th><th>Статус</th><th></th></tr>`+
+  l.map(x=>`<tr><td>${x.id}</td><td>${esc(x.full_name||x.user_email)}<div class=mut style="font-size:12px">${esc(x.phone)}</div></td><td>${x.amount}</td><td>${x.term_days} дн.</td><td>${fd(x.created_at)}</td>
+  <td><span class=b>${st[x.status]}</span></td><td style="white-space:nowrap"><button class=g onclick="openLoan(${x.id})">Данные</button>
+  ${x.status=="pending"?` <button class=ok onclick="dec(${x.id},'approve')">Одобрить</button> <button class=r onclick="dec(${x.id},'reject')">Отклонить</button>`:""}</td></tr>`).join("")+"</table>"
+  :'<span class=mut>Заявок нет</span>'}
+function openLoan(id){const x=allLoans.find(l=>l.id===id);if(!x)return;
+ const age=x.birth_date?Math.floor((Date.now()-new Date(x.birth_date))/31557600000):0;
+ const kv=a=>`<div class=kv>`+a.map(([k,v])=>`<div class=mut>${k}</div><div>${v||"—"}</div>`).join("")+`</div>`;
+ $("mbox").innerHTML=`<div style="display:flex;justify-content:space-between;align-items:center"><h3 style="margin:0">Заявка №${x.id}</h3><button class=g onclick="closeModal()">✕</button></div>
+ <p><span class=b>${st[x.status]}</span></p>
+ <h4>Заёмщик</h4>${kv([["ФИО",esc(x.full_name)],["Email",esc(x.user_email)],["Телефон",esc(x.phone)],["Дата рождения",x.birth_date?esc(x.birth_date)+" ("+age+" лет)":""],["Документ",esc(x.doc_number)],["Адрес",esc(x.address)]])}
+ <h4>Занятость и доход</h4>${kv([["Статус",EMP[x.employment]||esc(x.employment)],["Работодатель",esc(x.employer)],["Доход в месяц",x.income||""]])}
+ <h4>Кредит</h4>${kv([["Сумма",x.amount],["Срок",x.term_days+" дн."],["К возврату",x.total_due],["Оплачено",x.paid],["Цель",esc(x.purpose)],["Подана",fd(x.created_at)],["Решение",fd(x.decided_at)],["Вернуть до",fd(x.due_date)]])}
+ ${x.status=="pending"?`<p><button class=ok onclick="dec(${x.id},'approve')">Одобрить</button> <button class=r onclick="dec(${x.id},'reject')">Отклонить</button></p>`:""}`;
+ $("modal").classList.remove("hidden")}
+function closeModal(){$("modal").classList.add("hidden")}
+async function dec(id,a){await api("POST",`/api/admin/loans/${id}/${a}`);loadAdmin();load()}
+function upd(){const a=+$("amount").value,t=+$("term").value;$("calc").textContent=`К возврату: ${(a*(1+0.005*t)).toFixed(2)} (0.5% в день)`}
+const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const EMP={employed:"Работает по найму",self:"Самозанятый / ИП",student:"Студент",pensioner:"Пенсионер",unemployed:"Не работает"};
+async function apply(){$("err").textContent="";
+ const f=id=>$(id).value.trim();
+ const body={amount:+f("amount"),term_days:+f("term"),full_name:f("full_name"),phone:f("phone"),birth_date:f("birth_date"),doc_number:f("doc_number"),address:f("address"),employment:f("employment"),employer:f("employer"),income:+f("income"),purpose:f("purpose"),consent:$("consent").checked};
+ try{await api("POST","/api/loans",body);$("consent").checked=false;load()}catch(e){$("err").textContent=e.message}}
+function prefill(x){if(!x||!x.full_name||$("full_name").value)return;
+ ["full_name","phone","birth_date","doc_number","address","employer","purpose"].forEach(k=>$(k).value=x[k]||"");
+ $("employment").value=x.employment||"employed";$("income").value=x.income||"";$("employment").onchange()}
+$("employment").onchange=()=>$("empBox").classList.toggle("hidden",$("employment").value!=="employed");
+$("amount").oninput=$("term").oninput=upd;upd();init();
+</script></body></html>
